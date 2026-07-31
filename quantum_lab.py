@@ -1,20 +1,31 @@
 import optuna
 import pandas as pd
 import numpy as np
+import json
+import os
+import yfinance as yf
+import matplotlib.pyplot as plt
 from fast_backtest import BacktestEngine
 from strategy_logic import QuantumStrategy
 
-# Предположим, что данные загружаются глобально или передаются
-# Для примера создадим заглушку данных
 def get_data():
-    dates = pd.date_range(start='2020-01-01', periods=2000, freq='H')
-    return pd.DataFrame({
-        'open': np.random.randn(2000).cumsum() + 100,
-        'high': np.random.randn(2000).cumsum() + 101,
-        'low': np.random.randn(2000).cumsum() + 99,
-        'close': np.random.randn(2000).cumsum() + 100
-    }, index=dates)
+    """
+    Загружает данные из data.csv или скачивает EURUSD M15 через yfinance.
+    """
+    file_path = 'data.csv'
+    if os.path.exists(file_path):
+        print("Загрузка данных из локального файла...")
+        return pd.read_csv(file_path, index_col=0, parse_dates=True)
+    else:
+        print("Файл data.csv не найден. Скачивание EURUSD M15...")
+        # Скачиваем данные за последний год
+        df = yf.download('EURUSD=X', period='1y', interval='15m')
+        # Приводим колонки к нижнему регистру для совместимости
+        df.columns = [c.lower() for c in df.columns]
+        df.to_csv(file_path)
+        return df
 
+# Загрузка данных
 data = get_data()
 train_size = int(len(data) * 0.8)
 train_df = data.iloc[:train_size]
@@ -55,6 +66,40 @@ def objective(trial):
     return sharpe
 
 if __name__ == '__main__':
+    print("Запуск оптимизации...")
     study = optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=50)
-    print("Best params:", study.best_params)
+    study.optimize(objective, n_trials=100)
+    
+    best_params = study.best_params
+    print("Best params:", best_params)
+    
+    # Сохранение параметров
+    with open('best_params.json', 'w') as f:
+        json.dump(best_params, f, indent=4)
+    
+    # Финальный прогон на OOS для графика
+    print("Построение графика эквити...")
+    strategy = QuantumStrategy()
+    targets = strategy.prepare_targets(train_df, best_params['sigma'])
+    features = strategy.add_features(train_df)
+    strategy.train_student(features, targets)
+    
+    test_features = strategy.add_features(test_df)
+    signals = strategy.predict_signals(test_features, best_params['threshold'])
+    
+    engine = BacktestEngine(test_df.loc[test_features.index])
+    trades = engine.run(signals, sl_points=best_params['sl_points'], timeout_bars=best_params['hold_bars'])
+    
+    # Построение графика
+    if not trades.empty:
+        equity = trades['pnl'].cumsum()
+        plt.figure(figsize=(10, 6))
+        plt.plot(equity)
+        plt.title('Equity Curve (Out-of-Sample)')
+        plt.xlabel('Trade Index')
+        plt.ylabel('Cumulative PnL')
+        plt.grid(True)
+        plt.savefig('equity_curve.png')
+        print("График сохранен как equity_curve.png")
+    else:
+        print("Сделок не было, график не построен.")
