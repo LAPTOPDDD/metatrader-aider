@@ -50,9 +50,10 @@ def objective(trial):
     hold_bars = trial.suggest_int('hold_bars', 1, 20)
     sl_points = trial.suggest_float('sl_points', 0.01, 0.5)
     threshold = trial.suggest_float('threshold', 0.51, 0.7)
+    model_type = trial.suggest_categorical('model_type', ['lightgbm', 'tabpfn'])
     
     # Инициализация стратегии
-    strategy = QuantumStrategy()
+    strategy = QuantumStrategy(model_type=model_type)
     
     # Подготовка данных
     targets = strategy.prepare_targets(train_df, sigma)
@@ -81,7 +82,7 @@ def objective(trial):
 if __name__ == '__main__':
     print("Запуск оптимизации...")
     study = optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials=30)
     
     best_params = study.best_params
     print("Best params:", best_params)
@@ -92,7 +93,7 @@ if __name__ == '__main__':
     
     # Финальный прогон на OOS для графика
     print("Построение графика эквити...")
-    strategy = QuantumStrategy()
+    strategy = QuantumStrategy(model_type=best_params['model_type'])
     targets = strategy.prepare_targets(train_df, best_params['sigma'])
     features = strategy.add_features(train_df)
     strategy.train_student(features, targets)
@@ -108,7 +109,7 @@ if __name__ == '__main__':
         equity = trades['pnl'].cumsum()
         plt.figure(figsize=(10, 6))
         plt.plot(equity)
-        plt.title('Equity Curve (Out-of-Sample)')
+        plt.title(f'Equity Curve (Out-of-Sample) - {best_params["model_type"]}')
         plt.xlabel('Trade Index')
         plt.ylabel('Cumulative PnL')
         plt.grid(True)
