@@ -3,23 +3,20 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from sklearn.preprocessing import StandardScaler
 from catboost import CatBoostClassifier
-from tabpfn import TabPFNClassifier
 
 class QuantumStrategy:
     def __init__(self, model_type='lightgbm'):
         self.model_type = model_type
         self.scaler = StandardScaler()
         
-        if self.model_type == 'lightgbm':
-            self.model = CatBoostClassifier(
-                iterations=500,
-                learning_rate=0.05,
-                depth=6,
-                verbose=False,
-                allow_writing_files=False
-            )
-        elif self.model_type == 'tabpfn':
-            self.model = TabPFNClassifier(device='cpu', N_ensemble_configurations=32)
+        # Используем CatBoost как основную модель
+        self.model = CatBoostClassifier(
+            iterations=500,
+            learning_rate=0.05,
+            depth=6,
+            verbose=False,
+            allow_writing_files=False
+        )
             
         self.features = [
             'macd', 'rsi', 'bb_pos', 'prev_ret', 'atr', 'roc', 
@@ -120,11 +117,6 @@ class QuantumStrategy:
         mask = ~y.isna()
         X_clean = X[mask]
         y_clean = y[mask]
-        
-        # Ограничение для TabPFN (последние 1000 образцов)
-        if self.model_type == 'tabpfn':
-            X_clean = X_clean.iloc[-1000:]
-            y_clean = y_clean.iloc[-1000:]
         
         # Масштабирование
         X_scaled = self.scaler.fit_transform(X_clean)
