@@ -100,6 +100,15 @@ if __name__ == '__main__':
         plt.ylabel('Cumulative PnL')
         plt.grid(True)
         plt.savefig('equity_curve.png')
+        
+        # Запись результата
+        pnl = trades['pnl']
+        sharpe = (pnl.mean() / pnl.std()) * np.sqrt(252) if pnl.std() != 0 else 0
+        with open('last_result.txt', 'w') as f:
+            f.write(f"SHARPE: {sharpe:.4f}, TRADES: {len(trades)}")
+            
         print("График сохранен как equity_curve.png")
     else:
+        with open('last_result.txt', 'w') as f:
+            f.write("SHARPE: 0.0000, TRADES: 0")
         print("Сделок не было, график не построен.")
