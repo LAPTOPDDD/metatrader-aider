@@ -2,6 +2,7 @@ import MetaTrader5 as mt5
 import pandas as pd
 import json
 import time
+import matplotlib.pyplot as plt
 from strategy_logic import QuantumStrategy
 
 # Константы
@@ -23,7 +24,7 @@ def get_market_data(n=1000):
     df.columns = ['open', 'high', 'low', 'close', 'volume', 'spread', 'real_volume']
     return df[['open', 'high', 'low', 'close', 'volume']]
 
-def execute_trade(signal, expected_price):
+def execute_trade(signal, expected_price, equity_history):
     tick = mt5.symbol_info_tick(SYMBOL)
     
     if signal == 1: # Buy
@@ -46,6 +47,8 @@ def execute_trade(signal, expected_price):
         }
         mt5.order_send(request)
         print("Buy executed")
+        # Упрощенный учет PnL для графика (в реале нужно отслеживать закрытие)
+        equity_history.append(equity_history[-1] - (market_price * 0.0001)) # Примерный учет комиссии/спреда
 
     elif signal == -1: # Sell
         market_price = tick.bid
@@ -67,6 +70,16 @@ def execute_trade(signal, expected_price):
         }
         mt5.order_send(request)
         print("Sell executed")
+        equity_history.append(equity_history[-1] - (market_price * 0.0001))
+
+def plot_equity(equity_history):
+    plt.figure(figsize=(10, 5))
+    plt.plot(equity_history)
+    plt.title("Live Equity Curve")
+    plt.xlabel("Trades")
+    plt.ylabel("Balance")
+    plt.savefig("live_equity.png")
+    plt.close()
 
 def main():
     if not mt5.initialize():
@@ -75,18 +88,16 @@ def main():
 
     params = load_best_params()
     strategy = QuantumStrategy()
+    equity_history = [10000.0] # Начальный баланс
     
     print("Загрузка данных и обучение модели...")
-    df = get_market_data(n=2000) # Берем больше данных для обучения
+    df = get_market_data(n=2000)
     if df is None:
         print("Не удалось получить данные для обучения")
         return
         
-    # Подготовка данных для обучения
     targets = strategy.prepare_targets(df, params.get('sigma', 3.0))
     features = strategy.add_features(df)
-    
-    # Обучение модели
     strategy.train_student(features, targets)
     print("Модель обучена. Бот запущен.")
     
@@ -96,24 +107,22 @@ def main():
             time.sleep(60)
             continue
             
-        # Подготовка признаков
         features = strategy.add_features(df)
         if features.empty:
             time.sleep(60)
             continue
             
-        # Прогноз
         last_features = features.iloc[[-1]]
         signal = strategy.predict_signals(last_features, params['threshold']).iloc[0]
         
         if signal != 0:
-            # Расчет ожидаемой цены входа
             current_close = df['close'].iloc[-1]
             expected_price = current_close * (1 + SPREAD) if signal == 1 else current_close * (1 - SPREAD)
             
-            execute_trade(signal, expected_price)
+            execute_trade(signal, expected_price, equity_history)
+            plot_equity(equity_history)
             
-        time.sleep(60) # Пауза между проверками
+        time.sleep(60)
 
 if __name__ == '__main__':
     try:
