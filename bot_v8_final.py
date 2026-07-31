@@ -8,7 +8,8 @@ from strategy_logic import QuantumStrategy
 # Константы
 SYMBOL = "EURUSD"
 SPREAD = 0.0001  # Фиксированный спред для контроля проскальзывания
-SLIPPAGE_LIMIT = 0.5 * SPREAD
+# Увеличиваем лимит проскальзывания, чтобы бот мог входить в сделки
+SLIPPAGE_LIMIT = 2.0 * SPREAD
 
 def load_best_params():
     with open('best_params.json', 'r') as f:
@@ -30,7 +31,7 @@ def execute_trade(signal, expected_price, equity_history):
     if signal == 1: # Buy
         market_price = tick.ask
         if abs(market_price - expected_price) > SLIPPAGE_LIMIT:
-            print(f"Slippage Control: Buy отклонен. Разница {abs(market_price - expected_price):.6f}")
+            print(f"Slippage Control: Buy отклонен. Разница {abs(market_price - expected_price):.6f} > {SLIPPAGE_LIMIT:.6f}")
             return
         
         request = {
@@ -47,13 +48,13 @@ def execute_trade(signal, expected_price, equity_history):
         }
         mt5.order_send(request)
         print("Buy executed")
-        # Упрощенный учет PnL для графика (в реале нужно отслеживать закрытие)
-        equity_history.append(equity_history[-1] - (market_price * 0.0001)) # Примерный учет комиссии/спреда
+        # Упрощенный учет PnL для графика
+        equity_history.append(equity_history[-1] - (market_price * 0.0001)) 
 
     elif signal == -1: # Sell
         market_price = tick.bid
         if abs(market_price - expected_price) > SLIPPAGE_LIMIT:
-            print(f"Slippage Control: Sell отклонен. Разница {abs(market_price - expected_price):.6f}")
+            print(f"Slippage Control: Sell отклонен. Разница {abs(market_price - expected_price):.6f} > {SLIPPAGE_LIMIT:.6f}")
             return
 
         request = {
@@ -78,6 +79,7 @@ def plot_equity(equity_history):
     plt.title("Live Equity Curve")
     plt.xlabel("Trades")
     plt.ylabel("Balance")
+    plt.grid(True)
     plt.savefig("live_equity.png")
     plt.close()
 
