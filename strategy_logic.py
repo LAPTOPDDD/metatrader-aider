@@ -5,8 +5,15 @@ from lightgbm import LGBMClassifier
 
 class QuantumStrategy:
     def __init__(self):
-        self.model = LGBMClassifier(n_estimators=100, learning_rate=0.05, verbose=-1)
-        self.features = ['macd', 'rsi', 'bb_pos', 'prev_ret']
+        # Усложняем модель для лучшей генерализации
+        self.model = LGBMClassifier(
+            n_estimators=200, 
+            learning_rate=0.03, 
+            num_leaves=31, 
+            max_depth=5, 
+            verbose=-1
+        )
+        self.features = ['macd', 'rsi', 'bb_pos', 'prev_ret', 'atr']
 
     def prepare_targets(self, data: pd.DataFrame, sigma: float):
         """
@@ -53,6 +60,14 @@ class QuantumStrategy:
         
         # Prev Return
         df['prev_ret'] = df['close'].pct_change().shift(1)
+        
+        # ATR (14) - нормализация волатильности
+        high_low = df['high'] - df['low']
+        high_close = np.abs(df['high'] - df['close'].shift())
+        low_close = np.abs(df['low'] - df['close'].shift())
+        ranges = pd.concat([high_low, high_close, low_close], axis=1)
+        true_range = ranges.max(axis=1)
+        df['atr'] = true_range.rolling(14).mean().shift(1)
         
         return df.dropna()
 
