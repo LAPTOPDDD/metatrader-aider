@@ -7,14 +7,14 @@ class QuantumStrategy:
     def __init__(self):
         # Усложняем модель для лучшей генерализации
         self.model = LGBMClassifier(
-            n_estimators=200, 
-            learning_rate=0.03, 
+            n_estimators=300, 
+            learning_rate=0.02, 
             num_leaves=31, 
-            max_depth=5, 
-            min_child_samples=20,
+            max_depth=6, 
+            min_child_samples=50,
             verbose=-1
         )
-        self.features = ['macd', 'rsi', 'bb_pos', 'prev_ret', 'atr', 'roc', 'volatility']
+        self.features = ['macd', 'rsi', 'bb_pos', 'prev_ret', 'atr', 'roc', 'volatility', 'hour', 'day_of_week', 'volume']
 
     def prepare_targets(self, data: pd.DataFrame, sigma: float):
         """
@@ -76,6 +76,16 @@ class QuantumStrategy:
         
         # Volatility - режим рынка
         df['volatility'] = df['close'].pct_change().rolling(20).std().shift(1)
+        
+        # Временные признаки
+        df['hour'] = df.index.hour
+        df['day_of_week'] = df.index.dayofweek
+        
+        # Volume (если есть в данных)
+        if 'volume' in df.columns:
+            df['volume'] = df['volume'].shift(1)
+        else:
+            df['volume'] = 0 # Заглушка, если данных нет
         
         return df.dropna()
 
