@@ -11,29 +11,31 @@ class QuantumStrategy:
             learning_rate=0.03, 
             num_leaves=31, 
             max_depth=5, 
+            min_child_samples=20,
             verbose=-1
         )
-        self.features = ['macd', 'rsi', 'bb_pos', 'prev_ret', 'atr']
+        self.features = ['macd', 'rsi', 'bb_pos', 'prev_ret', 'atr', 'roc', 'volatility']
 
     def prepare_targets(self, data: pd.DataFrame, sigma: float):
         """
-        Расчет таргета через производную Гаусса.
-        MATH_OFFSET отсекает края, где фильтр Гаусса наиболее подвержен искажениям.
+        Расчет таргета через производную Гаусса с адаптивным порогом.
         """
         math_offset = int(4 * sigma)
         
         # Первая производная через Гаусс
         derivative = gaussian_filter1d(data['close'], sigma=sigma, order=1)
         
-        # Таргет: 1 если производная > 0, иначе 0
-        targets = (derivative > 0).astype(int)
+        # Адаптивный порог: отсекаем шум
+        threshold = np.std(derivative) * 0.5
         
-        # Применяем отступ: последние бары (и первые) не используем для обучения
-        # чтобы избежать "краевых галлюцинаций"
+        # Таргет: 1 если производная > порога, 0 если < -порога, иначе NaN (нейтрально)
+        targets = np.where(derivative > threshold, 1, np.where(derivative < -threshold, 0, np.nan))
+        
+        # Применяем отступ
         targets[:math_offset] = np.nan
         targets[-math_offset:] = np.nan
         
-        return targets
+        return pd.Series(targets, index=data.index)
 
     def add_features(self, data: pd.DataFrame):
         """
@@ -61,13 +63,19 @@ class QuantumStrategy:
         # Prev Return
         df['prev_ret'] = df['close'].pct_change().shift(1)
         
-        # ATR (14) - нормализация волатильности
+        # ATR (14)
         high_low = df['high'] - df['low']
         high_close = np.abs(df['high'] - df['close'].shift())
         low_close = np.abs(df['low'] - df['close'].shift())
         ranges = pd.concat([high_low, high_close, low_close], axis=1)
         true_range = ranges.max(axis=1)
         df['atr'] = true_range.rolling(14).mean().shift(1)
+        
+        # ROC (Rate of Change) - импульс
+        df['roc'] = df['close'].pct_change(periods=5).shift(1)
+        
+        # Volatility - режим рынка
+        df['volatility'] = df['close'].pct_change().rolling(20).std().shift(1)
         
         return df.dropna()
 
@@ -80,7 +88,7 @@ class QuantumStrategy:
         X = train_data.loc[common_idx]
         y = targets.loc[common_idx]
         
-        # Удаляем NaN, которые могли возникнуть из-за MATH_OFFSET или лагов
+        # Удаляем NaN (включая те, что мы создали в prepare_targets для нейтральных зон)
         mask = ~y.isna()
         self.model.fit(X[mask], y[mask])
 
