@@ -2,18 +2,17 @@ import pandas as pd
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
 from sklearn.preprocessing import StandardScaler
-# Предполагаем, что библиотека TabFM установлена и предоставляет интерфейс, совместимый со sklearn
-# Если вы используете специфическую реализацию, импорт может отличаться
-from tabfm import TabFMClassifier 
+from catboost import CatBoostClassifier
 
 class QuantumStrategy:
     def __init__(self):
-        # Инициализация TabFM
-        # Трансформеры требуют больше ресурсов, поэтому параметры могут отличаться
-        self.model = TabFMClassifier(
-            n_estimators=100, # Количество деревьев/слоев в ансамбле TabFM
-            learning_rate=0.01,
-            verbose=False
+        # Используем CatBoost как мощную альтернативу трансформерам
+        self.model = CatBoostClassifier(
+            iterations=500,
+            learning_rate=0.05,
+            depth=6,
+            verbose=False,
+            allow_writing_files=False
         )
         self.scaler = StandardScaler()
         self.features = [
@@ -104,7 +103,7 @@ class QuantumStrategy:
 
     def train_student(self, train_data: pd.DataFrame, targets: pd.Series):
         """
-        Обучение Ученика (TabFM) предсказывать таргет Учителя.
+        Обучение Ученика (CatBoost) предсказывать таргет Учителя.
         """
         # Выравниваем данные по индексам
         common_idx = train_data.index.intersection(targets.index)
@@ -116,7 +115,7 @@ class QuantumStrategy:
         X_clean = X[mask]
         y_clean = y[mask]
         
-        # Нормализация данных (критично для трансформеров)
+        # CatBoost отлично работает с сырыми данными, но масштабирование не повредит
         X_scaled = self.scaler.fit_transform(X_clean)
         
         self.model.fit(X_scaled, y_clean)
