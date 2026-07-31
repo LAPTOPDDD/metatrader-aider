@@ -1,21 +1,21 @@
 import pandas as pd
 import numpy as np
 from scipy.ndimage import gaussian_filter1d
-from lightgbm import LGBMClassifier
+from sklearn.preprocessing import StandardScaler
+# Предполагаем, что библиотека TabFM установлена и предоставляет интерфейс, совместимый со sklearn
+# Если вы используете специфическую реализацию, импорт может отличаться
+from tabfm import TabFMClassifier 
 
 class QuantumStrategy:
     def __init__(self):
-        # Улучшенная модель с регуляризацией
-        self.model = LGBMClassifier(
-            n_estimators=500, 
-            learning_rate=0.01, 
-            num_leaves=31, 
-            max_depth=6, 
-            min_child_samples=50,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            verbose=-1
+        # Инициализация TabFM
+        # Трансформеры требуют больше ресурсов, поэтому параметры могут отличаться
+        self.model = TabFMClassifier(
+            n_estimators=100, # Количество деревьев/слоев в ансамбле TabFM
+            learning_rate=0.01,
+            verbose=False
         )
+        self.scaler = StandardScaler()
         self.features = [
             'macd', 'rsi', 'bb_pos', 'prev_ret', 'atr', 'roc', 
             'volatility', 'hour', 'day_of_week', 'volume', 
@@ -104,22 +104,31 @@ class QuantumStrategy:
 
     def train_student(self, train_data: pd.DataFrame, targets: pd.Series):
         """
-        Обучение Ученика (LightGBM) предсказывать таргет Учителя.
+        Обучение Ученика (TabFM) предсказывать таргет Учителя.
         """
         # Выравниваем данные по индексам
         common_idx = train_data.index.intersection(targets.index)
         X = train_data.loc[common_idx]
         y = targets.loc[common_idx]
         
-        # Удаляем NaN (включая те, что мы создали в prepare_targets для нейтральных зон)
+        # Удаляем NaN
         mask = ~y.isna()
-        self.model.fit(X[mask], y[mask])
+        X_clean = X[mask]
+        y_clean = y[mask]
+        
+        # Нормализация данных (критично для трансформеров)
+        X_scaled = self.scaler.fit_transform(X_clean)
+        
+        self.model.fit(X_scaled, y_clean)
 
     def predict_signals(self, test_data: pd.DataFrame, threshold: float):
         """
         Генерация сигналов на основе вероятностей модели.
         """
-        probs = self.model.predict_proba(test_data)[:, 1]
+        # Нормализация тестовых данных
+        X_scaled = self.scaler.transform(test_data)
+        
+        probs = self.model.predict_proba(X_scaled)[:, 1]
         signals = np.zeros_like(probs)
         
         signals[probs > threshold] = 1
