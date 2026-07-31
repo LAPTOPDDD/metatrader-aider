@@ -5,16 +5,22 @@ from lightgbm import LGBMClassifier
 
 class QuantumStrategy:
     def __init__(self):
-        # Усложняем модель для лучшей генерализации
+        # Улучшенная модель с регуляризацией
         self.model = LGBMClassifier(
-            n_estimators=300, 
-            learning_rate=0.02, 
+            n_estimators=500, 
+            learning_rate=0.01, 
             num_leaves=31, 
             max_depth=6, 
             min_child_samples=50,
+            subsample=0.8,
+            colsample_bytree=0.8,
             verbose=-1
         )
-        self.features = ['macd', 'rsi', 'bb_pos', 'prev_ret', 'atr', 'roc', 'volatility', 'hour', 'day_of_week', 'volume']
+        self.features = [
+            'macd', 'rsi', 'bb_pos', 'prev_ret', 'atr', 'roc', 
+            'volatility', 'hour', 'day_of_week', 'volume', 
+            'vol_change', 'vol_regime', 'ret_3', 'ret_5'
+        ]
 
     def prepare_targets(self, data: pd.DataFrame, sigma: float):
         """
@@ -26,7 +32,7 @@ class QuantumStrategy:
         derivative = gaussian_filter1d(data['close'], sigma=sigma, order=1)
         
         # Адаптивный порог: отсекаем шум
-        threshold = np.std(derivative) * 0.5
+        threshold = np.std(derivative) * 0.7
         
         # Таргет: 1 если производная > порога, 0 если < -порога, иначе NaN (нейтрально)
         targets = np.where(derivative > threshold, 1, np.where(derivative < -threshold, 0, np.nan))
@@ -62,6 +68,8 @@ class QuantumStrategy:
         
         # Prev Return
         df['prev_ret'] = df['close'].pct_change().shift(1)
+        df['ret_3'] = df['close'].pct_change(3).shift(1)
+        df['ret_5'] = df['close'].pct_change(5).shift(1)
         
         # ATR (14)
         high_low = df['high'] - df['low']
@@ -84,8 +92,13 @@ class QuantumStrategy:
         # Volume (если есть в данных)
         if 'volume' in df.columns:
             df['volume'] = df['volume'].shift(1)
+            df['vol_change'] = df['volume'].pct_change().shift(1)
         else:
-            df['volume'] = 0 # Заглушка, если данных нет
+            df['volume'] = 0
+            df['vol_change'] = 0
+            
+        # Volatility Regime
+        df['vol_regime'] = df['atr'] / df['atr'].rolling(50).mean()
         
         return df.dropna()
 
