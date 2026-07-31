@@ -3,30 +3,43 @@ import pandas as pd
 import numpy as np
 import json
 import os
-import yfinance as yf
+import MetaTrader5 as mt5
 import matplotlib.pyplot as plt
 from fast_backtest import BacktestEngine
 from strategy_logic import QuantumStrategy
 
 def get_data():
     """
-    Загружает данные из data.csv или скачивает EURUSD M15 через yfinance.
+    Загружает данные напрямую из MetaTrader 5.
     """
-    file_path = 'data.csv'
-    if os.path.exists(file_path):
-        print("Загрузка данных из локального файла...")
-        return pd.read_csv(file_path, index_col=0, parse_dates=True)
-    else:
-        print("Файл data.csv не найден. Скачивание EURUSD M15...")
-        # Скачиваем данные за последний год
-        df = yf.download('EURUSD=X', period='1y', interval='15m')
-        # Приводим колонки к нижнему регистру для совместимости
-        df.columns = [c.lower() for c in df.columns]
-        df.to_csv(file_path)
-        return df
+    if not mt5.initialize():
+        print("Ошибка инициализации MT5")
+        return None
+    
+    # Получаем 10000 баров EURUSD M15
+    rates = mt5.copy_rates_from_pos("EURUSD", mt5.TIMEFRAME_M15, 0, 10000)
+    mt5.shutdown()
+    
+    if rates is None:
+        print("Не удалось получить данные из MT5")
+        return None
+        
+    df = pd.DataFrame(rates)
+    # Преобразуем время
+    df['time'] = pd.to_datetime(df['time'], unit='s')
+    df.set_index('time', inplace=True)
+    
+    # Оставляем нужные колонки и переименовываем
+    df = df[['open', 'high', 'low', 'close', 'tick_volume']]
+    df.columns = ['open', 'high', 'low', 'close', 'volume']
+    
+    return df
 
 # Загрузка данных
 data = get_data()
+if data is None:
+    raise Exception("Данные не получены. Проверьте подключение к MT5.")
+
 train_size = int(len(data) * 0.8)
 train_df = data.iloc[:train_size]
 test_df = data.iloc[train_size:]
