@@ -34,15 +34,13 @@ def run_test(model_type):
     return trades['pnl'].cumsum()
 
 if __name__ == '__main__':
-    print("Сравнение моделей...")
-    equity_lgbm = run_test('lightgbm')
-    equity_tabpfn = run_test('tabpfn')
+    print("Запуск теста CatBoost...")
+    equity_catboost = run_test('lightgbm')
     
     plt.figure(figsize=(12, 6))
-    plt.plot(equity_lgbm, label='LightGBM (CatBoost)')
-    plt.plot(equity_tabpfn, label='TabPFN')
-    plt.title('Сравнение моделей: LightGBM vs TabPFN')
+    plt.plot(equity_catboost, label='CatBoost')
+    plt.title('Equity Curve: CatBoost')
     plt.legend()
     plt.grid(True)
     plt.savefig('model_comparison.png')
-    print("График сравнения сохранен как model_comparison.png")
+    print("График сохранен как model_comparison.png")
