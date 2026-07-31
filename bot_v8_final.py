@@ -13,7 +13,7 @@ def load_best_params():
     with open('best_params.json', 'r') as f:
         return json.load(f)
 
-def get_market_data(n=100):
+def get_market_data(n=1000):
     rates = mt5.copy_rates_from_pos(SYMBOL, mt5.TIMEFRAME_M15, 0, n)
     if rates is None:
         return None
@@ -76,10 +76,22 @@ def main():
     params = load_best_params()
     strategy = QuantumStrategy()
     
-    print("Бот запущен. Ожидание сигналов...")
+    print("Загрузка данных и обучение модели...")
+    df = get_market_data(n=2000) # Берем больше данных для обучения
+    if df is None:
+        print("Не удалось получить данные для обучения")
+        return
+        
+    # Подготовка данных для обучения
+    targets = strategy.prepare_targets(df, params.get('sigma', 3.0))
+    features = strategy.add_features(df)
+    
+    # Обучение модели
+    strategy.train_student(features, targets)
+    print("Модель обучена. Бот запущен.")
     
     while True:
-        df = get_market_data()
+        df = get_market_data(n=100)
         if df is None:
             time.sleep(60)
             continue
